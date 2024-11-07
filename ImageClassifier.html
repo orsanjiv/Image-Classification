@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Classification</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+    <style>
+        /* Reset and base styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            width: 100%;
+            min-height: 100vh;
+            margin: 0;
+            padding: 1rem;
+            background-color: #f5f5f5;
+        }
+
+        /* Container styles */
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0.5rem;
+        }
+
+        /* Header styles */
+        .header {
+            text-align: center;
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: clamp(1.5rem, 4vw, 2.5rem);
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            font-size: clamp(0.875rem, 2vw, 1rem);
+        }
+
+        /* Controls section */
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        /* Input and button styles */
+        input[type="file"] {
+            max-width: 100%;
+            padding: 0.5rem;
+        }
+
+        button {
+            padding: 0.75rem 1.25rem;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            font-size: clamp(0.875rem, 2vw, 1rem);
+            white-space: nowrap;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        /* Model status styles */
+        #model-status {
+            text-align: center;
+            margin: 1rem 0;
+            padding: 1rem;
+            border-radius: 4px;
+            font-size: clamp(0.875rem, 2vw, 1rem);
+        }
+
+        /* Webcam container styles */
+        #webcam-container {
+            width: 100%;
+            max-width: 600px;
+            margin: 1rem auto;
+            text-align: center;
+        }
+
+        #webcam-container canvas {
+            width: 100% !important;
+            height: auto !important;
+            max-width: 400px;
+            border-radius: 8px;
+        }
+
+        /* Image grid styles */
+        #image-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        /* Image card styles */
+        .image-prediction-card {
+            background: white;
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .image-prediction-card img {
+            width: 100%;
+            height: 200px;
+            object-fit: contain;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .image-prediction-card h3 {
+            font-size: clamp(0.875rem, 2vw, 1rem);
+            word-break: break-all;
+        }
+
+        /* Prediction results styles */
+        .prediction-results {
+            background: #f8f9fa;
+            padding: 0.75rem;
+            border-radius: 4px;
+        }
+
+        .prediction-results h4 {
+            margin-bottom: 0.5rem;
+            font-size: clamp(0.875rem, 2vw, 1rem);
+        }
+
+        .prediction-item {
+            display: flex;
+            flex-direction: column;
+            margin: 0.25rem 0;
+            padding: 0.25rem 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .prediction-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.25rem;
+            font-size: clamp(0.75rem, 1.5vw, 0.875rem);
+        }
+
+        .prediction-bar {
+            height: 8px;
+            background-color: #007bff;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        /* Status colors */
+        .status-loading { background-color: #fff3cd; color: #856404; }
+        .status-ready { background-color: #d4edda; color: #155724; }
+        .status-error { background-color: #f8d7da; color: #721c24; }
+
+        /* Medal colors */
+        .prediction-item:nth-child(1) .prediction-bar { background-color: #FFD700; }
+        .prediction-item:nth-child(2) .prediction-bar { background-color: #C0C0C0; }
+        .prediction-item:nth-child(3) .prediction-bar { background-color: #CD7F32; }
+
+        /* Media Queries */
+        @media (max-width: 480px) {
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            button {
+                width: 100%;
+            }
+
+            .image-prediction-card img {
+                height: 150px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Image Classification</h1>
+            <p>Upload images to see top 3 predictions</p>
+        </div>
+
+        <div class="controls">
+            <input type="file" id="file-input" accept="image/*" multiple>
+            <button type="button" onclick="init()" id="start-button">Start Model</button>
+            <button type="button" onclick="toggleWebcam()" id="webcam-button" disabled>Toggle Webcam</button>
+        </div>
+
+        <div id="model-status">Model not loaded. Click 'Start Model' to begin.</div>
+        
+        <div id="webcam-container"></div>
+        <div id="image-container"></div>
+    </div>
+
+    <script type="text/javascript">
+        // JavaScript remains the same as in the original code
+        let model, webcam, maxPredictions;
+        let isWebcamActive = false;
+        let isModelLoaded = false;
+
+        const modelURL = "./model.json";
+        const metadataURL = "./metadata.json";
+
+        document.getElementById('file-input').disabled = true;
+
+        async function init() {
+            const startButton = document.getElementById('start-button');
+            const fileInput = document.getElementById('file-input');
+            const webcamButton = document.getElementById('webcam-button');
+            const modelStatus = document.getElementById('model-status');
+            
+            startButton.disabled = true;
+            modelStatus.className = 'status-loading';
+            modelStatus.textContent = 'Loading model...';
+
+            try {
+                model = await tmImage.load(modelURL, metadataURL);
+                maxPredictions = model.getTotalClasses();
+                
+                fileInput.disabled = false;
+                webcamButton.disabled = false;
+                isModelLoaded = true;
+
+                modelStatus.className = 'status-ready';
+                modelStatus.textContent = 'Model loaded successfully! Upload images to see predictions.';
+
+                fileInput.addEventListener('change', handleImageUpload);
+            } catch (error) {
+                console.error('Error loading model:', error);
+                startButton.disabled = false;
+                modelStatus.className = 'status-error';
+                modelStatus.textContent = 'Error loading model. Please check your model URLs and try again.';
+                alert('Error loading model: ' + error.message);
+            }
+        }
+
+        async function handleImageUpload(event) {
+            if (!isModelLoaded) {
+                alert('Please wait for the model to load first!');
+                return;
+            }
+
+            const files = event.target.files;
+            const container = document.getElementById('image-container');
+            container.innerHTML = '';
+
+            for (let file of files) {
+                if (!file.type.startsWith('image/')) continue;
+
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    const card = createImageCard(e.target.result, file.name);
+                    container.appendChild(card);
+                    
+                    const img = new Image();
+                    img.onload = async function() {
+                        try {
+                            const predictions = await model.predict(img);
+                            updatePredictionResults(card, predictions);
+                        } catch (error) {
+                            console.error('Prediction error:', error);
+                            card.querySelector('.prediction-results').innerHTML = 
+                                '<div class="status-error">Error making prediction</div>';
+                        }
+                    };
+                    img.onerror = function() {
+                        card.querySelector('.prediction-results').innerHTML = 
+                            '<div class="status-error">Error loading image</div>';
+                    };
+                    img.src = e.target.result;
+                };
+
+                reader.onerror = function(error) {
+                    console.error('Error reading file:', error);
+                    alert('Error reading file: ' + file.name);
+                };
+
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function createImageCard(imageSrc, imageName) {
+            const card = document.createElement('div');
+            card.className = 'image-prediction-card';
+            
+            card.innerHTML = `
+                <img src="${imageSrc}" alt="${imageName}">
+                <h3>${imageName}</h3>
+                <div class="prediction-results">
+                    <div class="loading">Analyzing...</div>
+                </div>
+            `;
+            
+            return card;
+        }
+
+        function updatePredictionResults(card, predictions) {
+            const resultsDiv = card.querySelector('.prediction-results');
+            resultsDiv.innerHTML = '<h4>Top 3 Predictions:</h4>';
+
+            predictions
+                .sort((a, b) => b.probability - a.probability)
+                .slice(0, 3)
+                .forEach((prediction, index) => {
+                    const probability = (prediction.probability * 100).toFixed(1);
+                    const predictionDiv = document.createElement('div');
+                    predictionDiv.className = 'prediction-item';
+                    predictionDiv.innerHTML = `
+                        <div class="prediction-header">
+                            <strong>${prediction.className}</strong>
+                            <span>${probability}%</span>
+                        </div>
+                        <div class="prediction-bar" style="width: ${probability}%"></div>
+                    `;
+                    resultsDiv.appendChild(predictionDiv);
+                });
+        }
+
+        async function toggleWebcam() {
+            if (!isModelLoaded) {
+                alert('Please wait for the model to load first!');
+                return;
+            }
+
+            const webcamContainer = document.getElementById('webcam-container');
+            const webcamButton = document.getElementById('webcam-button');
+
+            if (!isWebcamActive) {
+                try {
+                    const flip = true;
+                    webcam = new tmImage.Webcam(400, 400, flip);
+                    await webcam.setup();
+                    await webcam.play();
+                    window.requestAnimationFrame(loop);
+
+                    webcamContainer.appendChild(webcam.canvas);
+                    isWebcamActive = true;
+                    webcamButton.textContent = 'Stop Webcam';
+                } catch (error) {
+                    console.error('Error accessing webcam:', error);
+                    alert('Error accessing webcam. Please make sure you have granted camera permissions.');
+                }
+            } else {
+                webcam.stop();
+                webcamContainer.innerHTML = '';
+                isWebcamActive = false;
+                webcamButton.textContent = 'Start Webcam';
+            }
+        }
+
+        async function loop() {
+            if (isWebcamActive) {
+                webcam.update();
+                await predict();
+                window.requestAnimationFrame(loop);
+            }
+        }
+
+        async function predict() {
+            if (webcam.canvas) {
+                const predictions = await model.predict(webcam.canvas);
+                const webcamContainer = document.getElementById('webcam-container');
+                
+                let predictionDiv = webcamContainer.querySelector('.prediction-results');
+                if (!predictionDiv) {
+                    predictionDiv = document.createElement('div');
+                    predictionDiv.className = 'prediction-results';
+                    webcamContainer.appendChild(predictionDiv);
+                }
+                
+                predictionDiv.innerHTML = '<h4>Top 3 Predictions:</h4>';
+                
+                predictions
+                    .sort((a, b) => b.probability - a.probability)
+                    .slice(0, 3)
+                    .forEach(prediction => {
+                        const probability = (prediction.probability * 100).toFixed(1);
+                        const predictionItem = document.createElement('div');
+                        predictionItem.className = 'prediction-item';
+                        predictionItem.innerHTML = `
+                            <div class="prediction-header">
+                                <strong>${prediction.className}</strong>
+                                <span>${probability}%</span>
+                            </div>
+                            <div class="prediction-bar" style="width: ${probability}%"></div>
+                        `;
+                        predictionDiv.appendChild(predictionItem);
+                    });
+            }
+        }
+    </script>
+</body>
+</html>
